@@ -14,14 +14,20 @@ This repository contains a comprehensive implementation of a Computer Vision pip
 - [License](#license)
 
 ## Installation
-![After the installation steps your workspace should be like this:](files/image.png)
+After the installation steps your workspace should be like this
+![Image](files/pipeline_folder_arch.png)
+Therefore after the installation of required dependencies for tracker, other files should be downloaded.
 To install the necessary dependencies, run the following command:
 
 ```bash
 pip install -r requirements.txt
 ```
+AVTrack model file is downloaded by [Google Drive Link](https://drive.google.com/drive/folders/1Dr4IulKQf_VgKyG4LelhFw9KRKR1Jl0Z)
+After downloading extract it, and by changing its name add models folder seeing at above.
+And to run the algorithm in a correct way, also the video should be downloaded from Altek Drive folder. After downlaoding, it should be added under the folder [videos](pipeline/videos)
 
 ## Usage
+Before running change the paths of models which are defined in [main.py](pipeline/main.py) and [av_track_params.py](pipeline/params/tracker/av_track_params.py)
 To run the pipeline, execute the following command:
 
 ```bash

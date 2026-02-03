@@ -1,3 +1,6 @@
+## This is an auto generated readme file. It will be updated later 
+
+
 # Computer Vision Pipeline
 
 ## Overview

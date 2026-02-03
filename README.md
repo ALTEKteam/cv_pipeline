@@ -14,7 +14,7 @@ This repository contains a comprehensive implementation of a Computer Vision pip
 - [License](#license)
 
 ## Installation
-After the installation steps your workspace should be like this: (files/image.png)
+[After the installation steps your workspace should be like this:] (files/image.png)
 To install the necessary dependencies, run the following command:
 
 ```bash

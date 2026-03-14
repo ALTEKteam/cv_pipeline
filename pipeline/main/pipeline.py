@@ -1,6 +1,7 @@
 import time
 import cv2 as cv
 from enum import Enum
+from pipeline.modules.target_selector import select_target, SelectionStrategy
 
 AV_X_MIN     = 0.25   # Target Engagement Zone horizontal left boundary
 AV_X_MAX     = 0.75   # Target Engagement Zone horizontal right boundary
@@ -20,9 +21,10 @@ class SystemState(Enum):
     TRACKING = 2    # Target acquired, continue tracking
 
 class DronePipeline:
-    def __init__(self, yolo_engine, tracker_engine):
+    def __init__(self, yolo_engine, tracker_engine, selection_strategy=SelectionStrategy.CLOSEST_TO_CENTER):
         self.yolo = yolo_engine
         self.tracker = tracker_engine
+        self.selection_strategy = selection_strategy
 
         # Initial state
         self.state = SystemState.SEARCHING
@@ -32,6 +34,7 @@ class DronePipeline:
         
         # Target data
         self.bbox = None # [x, y, w, h]
+        self.last_known_bbox = None  # Last tracked bbox for re-acquisition
 
 
     def run_step(self, frame):
@@ -53,18 +56,30 @@ class DronePipeline:
         return output_frame
 
     def execute_searching_mode(self, output,frame,fh,fw):
-        detected_bbox = self.yolo.detect(frame)        
-        if detected_bbox is not None:
-            x, y, w, h = detected_bbox
-            cx = x + w / 2.0
-            cy = y + h / 2.0
-            if self.check_center_of_box(cx, cy, fw, fh) and self.check_coverage(w, h, fw, fh):
-                print("TARGET ACQUIRED. INITIATING TRACKING...")
-                self.tracker.initialize(frame, detected_bbox)
-                self.state = SystemState.TRACKING
-                self.bbox = detected_bbox
-                self.lock_start_time = time.time()
-                self._draw_status(output, self.bbox, (0, 0, 255), "DETECTED")
+        detections = self.yolo.detect_all(frame)
+        if detections:
+            selected_bbox = select_target(
+                detections, fw, fh,
+                strategy=self.selection_strategy,
+                last_bbox=self.last_known_bbox
+            )
+            if selected_bbox is not None:
+                x, y, w, h = selected_bbox
+                cx = x + w / 2.0
+                cy = y + h / 2.0
+                if self.check_center_of_box(cx, cy, fw, fh) and self.check_coverage(w, h, fw, fh):
+                    print("TARGET ACQUIRED. INITIATING TRACKING...")
+                    self.tracker.initialize(frame, selected_bbox)
+                    self.state = SystemState.TRACKING
+                    self.bbox = selected_bbox
+                    self.last_known_bbox = selected_bbox
+                    self.lock_start_time = time.time()
+                    self._draw_status(output, self.bbox, (0, 0, 255), "DETECTED")
+            # Draw other detections as non-selected
+            for det in detections:
+                if selected_bbox is None or det['bbox'] != selected_bbox:
+                    bx, by, bw, bh = [int(v) for v in det['bbox']]
+                    cv.rectangle(output, (bx, by), (bx + bw, by + bh), COLOR_SEARCH, 1)
         else:
             cv.putText(output, "SEARCHING (YOLO)...", (50, 50), 
                        cv.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 4)
@@ -73,6 +88,7 @@ class DronePipeline:
         success, new_bbox = self.tracker.update(frame)
         if not success:
             print("[PIPELINE] TRACKER LOST TARGET -> SEARCHING")
+            self.last_known_bbox = self.bbox
             self.lock_start_time = None
             self.state = SystemState.SEARCHING
             self.bbox  = None

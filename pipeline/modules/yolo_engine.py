@@ -47,6 +47,17 @@ class YoloDetector:
     - Returns: [x, y, w, h] or None if no valid detection is found.
     '''
     def detect(self, frame):
+        detections = self.detect_all(frame)
+        if detections:
+            return detections[0]['bbox']
+        return None
+
+    '''
+    Make detection on the input frame and return all valid bounding boxes with confidence scores.
+    - Input: frame (BGR format)
+    - Returns: list of dicts [{'bbox': [x, y, w, h], 'confidence': float}, ...] or empty list.
+    '''
+    def detect_all(self, frame):
         original_h, original_w = frame.shape[:2]
         
         # 1. Preprocess
@@ -63,7 +74,7 @@ class YoloDetector:
         valid_indices = np.where(scores > self.conf_thres)[0]
         
         if len(valid_indices) == 0:
-            return None
+            return []
 
         valid_data = data[:, valid_indices]
         valid_scores = scores[valid_indices]
@@ -82,6 +93,7 @@ class YoloDetector:
         
         indices = cv.dnn.NMSBoxes(boxes, confidences, self.conf_thres, self.iou_thres)
         
+        results = []
         if len(indices) > 0:
             for i in indices.flatten():
                 x, y, w, h = boxes[i]
@@ -91,5 +103,5 @@ class YoloDetector:
                 in_center_y = (original_h * 0.10) < y and (y + h) < (original_h * 0.90)
                 
                 if is_big and in_center_x and in_center_y:
-                    return [x, y, w, h]
-        return None
+                    results.append({'bbox': [x, y, w, h], 'confidence': confidences[i]})
+        return results

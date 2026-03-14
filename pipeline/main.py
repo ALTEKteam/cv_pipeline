@@ -67,7 +67,7 @@ def main():
         x1, y1 = int(fw * 0.25), int(fh * 0.1)
         x2, y2 = int(fw * 0.75), int(fh * 0.9)
         cv.rectangle(processed_frame, (x1, y1), (x2, y2), (255,255,0), 2)
-        cv.putText(processed_frame, "HEDEF VURUS ALANI (AV)",(x1 + 4, y1 + 16), cv.FONT_HERSHEY_SIMPLEX, 0.4, (0,0,0) , 1)
+        cv.putText(processed_frame, "TARGET AREA (AV)",(x1 + 4, y1 + 16), cv.FONT_HERSHEY_SIMPLEX, 0.4, (0,0,0) , 1)
         cv.imshow("TEKNOFEST 2026 - TARGET SYSTEM", processed_frame)        
         if cv.waitKey(1) & 0xFF == ord('q'):
             break

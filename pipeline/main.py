@@ -71,7 +71,9 @@ def main():
         cv.imshow("TEKNOFEST 2026 - TARGET SYSTEM", processed_frame)        
         if cv.waitKey(1) & 0xFF == ord('q'):
             break
-            
+    
+
+    print("\n\nTOTAL LOCK COUNT: ", pipeline.getTotalLockCount());
     cap.release()
     cv.destroyAllWindows()
 

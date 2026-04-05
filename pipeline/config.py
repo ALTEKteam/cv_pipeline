@@ -15,6 +15,7 @@ IMPLEMENTATIONS_DIR = os.path.join(os.path.dirname(PROJECT_ROOT), "tracking_impl
 # Model paths
 # ============================================================
 MODELS_DIR = os.path.join(PROJECT_ROOT, "models")
+LOCK_VIDEO_DIR = os.path.join(PROJECT_ROOT, "locks")
 
 YOLO_MODEL_PATH = os.path.join(MODELS_DIR, "best_new_fp16.onnx")
 AVTRACK_CHECKPOINT = os.path.join(MODELS_DIR, "AVTrack_model.pth")
@@ -28,7 +29,7 @@ VITTRACKER_ONNX_PATH = os.path.join(MODELS_DIR, "vitTracker.onnx")
 # Video paths
 # ============================================================
 VIDEOS_DIR = os.path.join(PROJECT_ROOT, "videos")
-DEFAULT_VIDEO = os.path.join(VIDEOS_DIR, "Talon_video.mp4")
+DEFAULT_VIDEO = os.path.join(VIDEOS_DIR, "hoosier_fpv_700_feet.mp4")
 
 # ============================================================
 # Tracker implementation paths

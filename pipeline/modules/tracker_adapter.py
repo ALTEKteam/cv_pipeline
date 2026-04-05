@@ -94,12 +94,12 @@ class TrackerAdapter:
             score = outputs.get('best_score', 1.0) # default value is 1.0
             
             # Thresholding the score to determine if frame successfuly tracked or not.
-            if score > 0.4: # Threshold is %40, you can change it.
+            if score > 0.2: # Threshold is %40, you can change it.
                 final_bbox = [int(v) for v in bbox]
-                return True, final_bbox
+                return True, final_bbox,score
             else:
-                return False, None
-        return False, None
+                return False, None,score
+        return False, None, 0
 
     def clear_initialization(self):
         """

@@ -99,8 +99,8 @@ class AVTrackONNX(nn.Module):
         opt = enc_opt.unsqueeze(-1).permute(0, 3, 2, 1).contiguous()
         bs, Nq, C, HW = opt.size()
         opt_feat = opt.view(-1, C, self.feat_sz_s, self.feat_sz_s)
-        score_map, bbox, size_map, offset_map = self.box_head(opt_feat, None)
-        return score_map, size_map, offset_map
+        score_map, pred_boxes, size_map, offset_map = self.box_head(opt_feat, None)
+        return score_map, pred_boxes, size_map, offset_map
 
 
 # =============================================================================
@@ -127,11 +127,16 @@ def export_onnx(model, cfg, output_path, opset=17):
     print(f"[INFO] ONNX export -> {output_path} (opset {opset})")
     torch.onnx.export(
         wrapper, (t_dummy, s_dummy), output_path,
+        dynamic_axes={
+        'search': {2: 'h', 3: 'w'},
+        'score_map': {2: 'h', 3: 'w'},
+        'pred_boxes': {2: 'h', 3: 'w'}
+    },
         export_params=True,
         opset_version=opset,
-        do_constant_folding=True,
+        do_constant_folding=False,
         input_names=['template', 'search'],
-        output_names=['score_map', 'size_map', 'offset_map'],
+        output_names=['score_map', 'pred_boxes', 'size_map', 'offset_map'],
     )
     size_mb = os.path.getsize(output_path) / 1024 / 1024
     print(f"[OK] Export completed: {output_path} ({size_mb:.1f} MB)")
@@ -182,7 +187,7 @@ def verify_onnx(output_path, model, cfg):
     sess = ort.InferenceSession(output_path, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
     ort_out = sess.run(None, {'template': t_dummy.numpy(), 'search': s_dummy.numpy()})
 
-    names = ['score_map', 'size_map', 'offset_map']
+    names = ['score_map', 'pred_boxes', 'size_map', 'offset_map']
     print("\n  Verification:")
     all_ok = True
     for name, pt, ort_o in zip(names, pt_out, ort_out):
@@ -297,7 +302,7 @@ def main():
     parser.add_argument('--checkpoint', type=str, required=True)
     parser.add_argument('--config', type=str, default='deit_tiny_patch16_224')
     parser.add_argument('--output', type=str, default='avtrack.onnx')
-    parser.add_argument('--opset', type=int, default=17)
+    parser.add_argument('--opset', type=int, default=16)
     parser.add_argument('--test-video', type=str, default=None,
                         help='If provided, runs a video test using ONNX Runtime')
     args = parser.parse_args()

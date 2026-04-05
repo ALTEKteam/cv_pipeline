@@ -1,13 +1,20 @@
-import time
+import datetime
+import os
+import time as time2
 import cv2 as cv
 from enum import Enum
+from config import LOCK_VIDEO_DIR
+from recorder.video_recorder import LockVideoRecorder
+
+LOCK_TIME = 4.0
+
 
 AV_X_MIN     = 0.25   # Target Engagement Zone horizontal left boundary
 AV_X_MAX     = 0.75   # Target Engagement Zone horizontal right boundary
 AV_Y_MIN     = 0.10   # Target Engagement Zone vertical top boundary
 AV_Y_MAX     = 0.90   # Target Engagement Zone vertical bottom boundary
 MIN_COVERAGE = 0.06   # 5% specification limit; using 6% as a safety margin
-
+MAX_COVERAGE = 0.9
 # Colors (BGR)
 COLOR_AV      = (0, 220, 255)   # Target Engagement Zone
 COLOR_LOCK    = (0, 0, 255)     # Lock rectangle — red #FF0000
@@ -26,6 +33,7 @@ class DronePipeline:
 
         # Initial state
         self.state = SystemState.SEARCHING
+        self.detection_count = 0  # <--- BURAYA GELDİ
         
         # Timers
         self.lock_start_time = None  # Lock duration timer
@@ -33,23 +41,29 @@ class DronePipeline:
         # Target data
         self.bbox = None # [x, y, w, h]
 
+        local_folder_to_save_videos = os.path.join(LOCK_VIDEO_DIR, datetime.datetime.now().strftime("%Y-%m-%d"))
+        os.makedirs(local_folder_to_save_videos, exist_ok=True)
+
+        self.video_recorder = LockVideoRecorder(
+            output_dir=local_folder_to_save_videos,
+            fps=15,
+            team_name="ALTEK",
+            musabaka_no=datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        )
+
+
 
     def run_step(self, frame):
         output_frame = frame
         fh, fw = frame.shape[:2]
-        if self.lock_start_time is not None:
-            elapsed = time.time() - self.lock_start_time
-            if elapsed >= 4.0:  # If 4 seconds have elapsed
-                print("LOCK ENGAGEMENT COMPLETE. TARGET NEUTRALIZED.")
-                self._draw_status(frame, self.bbox, COLOR_AV, "STRIKE!")
-                self.lock_start_time = None  # Lock sequence completed, reset timer
-        
         # --- STATE 1: SEARCH MODE ---
         if self.state == SystemState.SEARCHING:
             self.execute_searching_mode(output_frame, frame,fh,fw)
         # --- STATE 2: TRACKING MODE ---
         elif self.state == SystemState.TRACKING:
             self.execute_tracking_mode(output_frame, frame,fh,fw)
+        cv.putText(output_frame, f"DETECTION COUNT: {self.detection_count}", (950, 50), 
+                cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,0), 4)
         return output_frame
 
     def execute_searching_mode(self, output,frame,fh,fw):
@@ -63,19 +77,35 @@ class DronePipeline:
                 self.tracker.initialize(frame, detected_bbox)
                 self.state = SystemState.TRACKING
                 self.bbox = detected_bbox
-                self.lock_start_time = time.time()
+                self.lock_start_time = time2.time()
                 self._draw_status(output, self.bbox, (0, 0, 255), "DETECTED")
+
+ 
+                # ===== VIDEO: Lock başladı, buffering başlat =====
+                self.video_recorder.start_buffering()
+                self.video_recorder.add_frame(frame, self.bbox, lock_elapsed=0.0)
+            else:
+                print("DETECTION IGNORED (OUT OF AV ZONE OR INSUFFICIENT COVERAGE)")
+                cv.putText(output, "SEARCHING (DETECTED OUT OF ZONE)...", (50, 50), 
+                           cv.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 4)
+
         else:
             cv.putText(output, "SEARCHING (YOLO)...", (50, 50), 
                        cv.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 4)
 
     def execute_tracking_mode(self,output,frame,fh,fw):
-        success, new_bbox = self.tracker.update(frame)
+        success, new_bbox,score = self.tracker.update(frame)
         if not success:
+            
             print("[PIPELINE] TRACKER LOST TARGET -> SEARCHING")
             self.lock_start_time = None
             self.state = SystemState.SEARCHING
             self.bbox  = None
+            # ===== VIDEO: Tracker kaybetti, kayıt iptal =====
+            self.video_recorder.cancel()
+            print(f"TRACKER SCORE: {score}")
+            
+            
             cv.putText(output, "STATE: TRACKING (LOST)",
                         (10, 30), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 80, 255), 2)
             return output
@@ -92,27 +122,42 @@ class DronePipeline:
         # Lock timing management
         if lock_valid:
             if self.lock_start_time is None:
-                self.lock_start_time = time.time()
+                self.lock_start_time = time2.time()
                 print(f"[PIPELINE] LOCK ENGAGEMENT STARTED: {self.lock_start_time} MS")
-            elapsed = time.time() - self.lock_start_time
-            if elapsed >= 4.0:
+            elapsed = time2.time() - self.lock_start_time
+            if elapsed >= LOCK_TIME:
                 print(">>> LOCK ENGAGEMENT COMPLETE. TARGET NEUTRALIZED. <<<")
                 self._draw_status(frame, self.bbox, COLOR_AV, "STRIKE!")
+                self.detection_count += 1
 
-                # Optional: return to search mode after mission completion
-                # self._reset_to_search() 
-                self.lock_start_time = None 
+                # ===== VIDEO: Lock tamamlandı, kaydet =====
+                filepath = self.video_recorder.finalize()
+                if filepath:
+                    print(f"[PIPELINE] Lock video saved: {filepath}")
+                self.video_recorder.add_frame(frame, self.bbox, lock_elapsed=elapsed)
+                self.lock_start_time = None
+                self.state = SystemState.SEARCHING
+                self.bbox = None
+            else:
+                # ===== VIDEO: Lock aktif, frame ekle =====
+                self.video_recorder.add_frame(frame, self.bbox, lock_elapsed=elapsed)
         else:
             # Conditions no longer met — reset timer
             if self.lock_start_time is not None:
+                elapsed = time2.time() - self.lock_start_time
                 print("[PIPELINE] LOCK CONDITIONS NO LONGER MET -> LOCK TIMER RESET")
+                                
+                # ===== VIDEO: Lock bozuldu, kayıt iptal =====
+                self.video_recorder.cancel()
+                print(f"TRACKER SCORE: {score} TIME: {elapsed:.2f} sec")
+            self.state = SystemState.SEARCHING
             self.lock_start_time = None
         # Rendering
         is_locking = self.lock_start_time is not None
         color = COLOR_LOCKING if is_locking else COLOR_LOCK
         cv.rectangle(output, (x, y), (x + w, y + h), color, 2)
         cv.circle(output, (int(cx), int(cy)), 4, color, -1)
-        cv.putText(output, f"H:{w/fw*100:.1f}%  V:{h/fh*100:.1f}%",
+        cv.putText(output, f"Width:{w/fw*100:.1f}%  Height:{h/fh*100:.1f}%",
                     (x, y - 8), cv.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
 
         cv.putText(output, "STATE: TRACKING",
@@ -120,7 +165,7 @@ class DronePipeline:
 
         return output
     def check_coverage(self, w, h, fw, fh):
-        return (w / fw >= MIN_COVERAGE) or (h / fh >= MIN_COVERAGE)
+        return ((w / fw >= MIN_COVERAGE) or (h / fh >= MIN_COVERAGE))
 
     def check_center_of_box(self, cx, cy, fw, fh) -> bool:
         return (
@@ -139,9 +184,11 @@ class DronePipeline:
         cv.putText(img, text, (x, y - 5), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     def _draw_av(self, img, fw, fh):
-        x1, y1 = int(fw * AV_X_MIN), int(fh * AV_Y_MIN)
-        x2, y2 = int(fw * AV_X_MAX), int(fh * AV_Y_MAX)
+        x1, y1 = int(fw * (AV_X_MIN)), int(fh * (AV_Y_MIN))
+        x2, y2 = int(fw * (AV_X_MAX)), int(fh * (AV_Y_MAX))
         cv.rectangle(img, (x1, y1), (x2, y2), COLOR_AV, 2)
         cv.putText(img, "TARGET ENGAGEMENT ZONE (AV)",
                 (x1 + 4, y1 + 16), cv.FONT_HERSHEY_SIMPLEX, 0.4, COLOR_AV, 1)
+    
+    def getTotalLockCount(self): return self.detection_count
 

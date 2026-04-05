@@ -15,9 +15,14 @@ pipeline/models/ORTrack_model.pth
 pipeline/models/vitTracker.onnx
 pipeline/models/best_new.onnx
 pipeline/models/mixformerv2_small.pth
-pipeline/videos/Talon_video.mp4
+pipeline/videos/
 pipeline/modules/_avtrack_adapter.py
 pipeline/modules/__pycache__/
 pipeline/params/__pycache__/
+pipeline/params/__pycache__/*
 pipeline/params/tracker/__pycache__/
+pipeline/locks/
 .readme.md
+pipeline/params/__pycache__/tracker_types.cpython-38.pyc
+pipeline/params/tracker/__pycache__/av_track_params.cpython-38.pyc
+tracking_implementations/AVTrack/output_models/*
